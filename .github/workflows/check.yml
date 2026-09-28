@@ -7,7 +7,16 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    name: check (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -18,8 +27,8 @@ jobs:
           target: build
           tags: recorder-check
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=check-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=check-${{ matrix.arch }}
       - name: fmt, clippy, test
         run: >
           docker run --rm -v "$PWD:/work" -w /work -e CARGO_TARGET_DIR=/tmp/target recorder-check ./scripts/check.sh

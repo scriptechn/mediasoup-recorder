@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-# Recorder: Rust + GStreamer 1.26 (Debian trixie). Host networking in compose: the RTP/RTCP port range binds on the host.
+# Recorder: Rust + GStreamer 1.26 (Debian trixie). Run it with host networking: the RTP/RTCP port range binds on the
+# host. Builds for linux/amd64 and linux/arm64.
 FROM rust:1.97-trixie AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev pkg-config clang \
@@ -20,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --system --create-home --uid 1001 recorder \
     && mkdir -p /spool && chown recorder:recorder /spool
 COPY --from=build /recorder /usr/local/bin/recorder
-# Layout policies as data (docs §7); fonts-dejavu-core (pulled in above) provides the label font, Material Icons the
+# Layout policies as data (docs/layout.md); fonts-dejavu-core (pulled in above) provides the label font, Material Icons the
 # status icons.
 COPY policies /etc/recorder/policies
 USER recorder

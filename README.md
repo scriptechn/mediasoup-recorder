@@ -21,7 +21,8 @@ before it playable.
   `PlainTransport` does exactly this; `docs/mediasoup.md` and `examples/mediasoup/` show the integration.
 - A **controller**: the process that owns the SFU session and tells the recorder what to record. It speaks a small
   socket.io protocol (`docs/protocol.md`). In mediasoup deployments this is the Node process that holds the routers.
-- Linux with GStreamer 1.26 or later at runtime (the Dockerfile builds a Debian image with everything in it).
+- Linux with GStreamer 1.26 or later at runtime (the Dockerfile builds a Debian image with everything in it). The
+  published image runs on linux/amd64 and linux/arm64.
 
 Optional:
 

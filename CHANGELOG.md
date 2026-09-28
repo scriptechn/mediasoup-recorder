@@ -4,6 +4,13 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 the project follows [Semantic Versioning](https://semver.org/). The control protocol, the spool format and the manifest
 are the public contract: a breaking change to any of them is a major version.
 
+## [1.1.1] - 2026-09-28
+
+### Added
+
+- The container image is published for linux/arm64 as well as linux/amd64, each built and tested on a machine of its own
+  architecture. Apple Silicon and ARM servers run it natively.
+
 ## [1.1.0] - 2026-09-28
 
 ### Added
@@ -40,5 +47,6 @@ First public release.
 - Optional upload to any S3-compatible store; without it the recording stays in the spool.
 - A reference controller for mediasoup and an end-to-end example that needs no browser.
 
+[1.1.1]: https://github.com/scriptechn/mediasoup-recorder/releases/tag/v1.1.1
 [1.1.0]: https://github.com/scriptechn/mediasoup-recorder/releases/tag/v1.1.0
 [1.0.0]: https://github.com/scriptechn/mediasoup-recorder/releases/tag/v1.0.0

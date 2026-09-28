@@ -1,7 +1,7 @@
 name: release
 
 # Pushing a tag `vX.Y.Z` publishes a GitHub release with that version's changelog section, and the container
-# image to the GitHub Container Registry.
+# image for linux/amd64 and linux/arm64 to the GitHub Container Registry.
 on:
   push:
     tags: ["v*.*.*"]
@@ -10,9 +10,21 @@ permissions:
   contents: write
   packages: write
 
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    name: check (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: The tag matches the version in Cargo.toml
@@ -30,15 +42,25 @@ jobs:
           target: build
           tags: recorder-check
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=check-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=check-${{ matrix.arch }}
       - name: fmt, clippy, test
         run: >
           docker run --rm -v "$PWD:/work" -w /work -e CARGO_TARGET_DIR=/tmp/target recorder-check ./scripts/check.sh
 
+  # One image per architecture, each built on a machine of that architecture and pushed by digest.
   image:
     needs: check
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    name: image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -50,22 +72,68 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+      - name: Keep the digest for the manifest
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "$RUNNER_TEMP/digests/${digest#sha256:}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The version tags point at one manifest that lists both architectures, so `docker pull` picks the right one.
+  manifest:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create the manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          tags=()
+          while read -r tag; do tags+=(-t "$tag"); done < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          images=()
+          for digest in *; do images+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create "${tags[@]}" "${images[@]}"
+      - name: Both architectures are in it
+        run: |
+          docker buildx imagetools inspect "$IMAGE:${{ steps.meta.outputs.version }}" | tee inspect.txt
+          grep -q "linux/amd64" inspect.txt
+          grep -q "linux/arm64" inspect.txt
 
   release:
-    needs: image
+    needs: manifest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,6 +148,8 @@ jobs:
           {
             echo
             echo "## Container image"
+            echo
+            echo "For linux/amd64 and linux/arm64."
             echo
             echo '```sh'
             echo "docker pull ghcr.io/${GITHUB_REPOSITORY}:${version}"
