@@ -1,3 +1,10 @@
+
+**Demo**
+
+Six participants, recorded and composed by release 1.1.0: the grid, a muted microphone, a camera switched off, the active speaker border and the title card. The cameras are Chromium's built-in test pattern.
+
+https://github.com/user-attachments/assets/d3c1b26a-6fcf-4a04-9169-8781b0902688
+
 # mediasoup-recorder
 
 Server-side meeting recording for SFU egress, built for [mediasoup](https://mediasoup.org). A single Rust binary with
