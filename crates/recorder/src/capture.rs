@@ -158,15 +158,8 @@ impl Capture {
             .lock()
             .unwrap()
             .insert(recording.id.clone(), recording.clone());
-        self.publish(
-            &recording.id,
-            RecordingStatus::Recording,
-            None,
-            None,
-            None,
-            None,
-        )
-        .await;
+        self.publish(StatusEvent::new(&recording.id, RecordingStatus::Recording))
+            .await;
 
         // A recording never runs longer than the cap.
         let cap = Duration::from_millis(self.config.max_recording_ms);
@@ -181,24 +174,8 @@ impl Capture {
         Ok(())
     }
 
-    async fn publish(
-        &self,
-        id: &str,
-        status: RecordingStatus,
-        stop: Option<StopReason>,
-        fail: Option<FailReason>,
-        detail: Option<String>,
-        artifacts: Option<Vec<String>>,
-    ) {
-        let event = StatusEvent {
-            recording_id: id.to_string(),
-            status,
-            at: now_ms(),
-            stop_reason: stop,
-            fail_reason: fail,
-            fail_detail: detail,
-            artifacts,
-        };
+    async fn publish(&self, event: StatusEvent) {
+        let (id, status) = (event.recording_id.as_str(), event.status);
         let Some(registry) = &self.registry else {
             tracing::info!(recording = %id, status = ?status, "status (no redis to publish to)");
             return;
@@ -227,12 +204,10 @@ impl Capture {
             let artifacts = local_artifacts(dir);
             tracing::info!(recording = %id, files = artifacts.len(), dir = %dir.display(), "captured; kept in the spool (no bucket)");
             self.publish(
-                id,
-                RecordingStatus::Captured,
-                Some(reason),
-                None,
-                None,
-                Some(artifacts),
+                StatusEvent::new(id, RecordingStatus::Captured)
+                    .stopped(reason)
+                    .artifacts(artifacts)
+                    .duration(captured_duration(dir)),
             )
             .await;
             self.wake_compose(id, prefix).await;
@@ -249,12 +224,10 @@ impl Capture {
                     .map(|f| f.key.trim_start_matches(&format!("{prefix}/")).to_string())
                     .collect();
                 self.publish(
-                    id,
-                    RecordingStatus::Captured,
-                    Some(reason),
-                    None,
-                    None,
-                    Some(artifacts),
+                    StatusEvent::new(id, RecordingStatus::Captured)
+                        .stopped(reason)
+                        .artifacts(artifacts)
+                        .duration(captured_duration(dir)),
                 )
                 .await;
                 self.wake_compose(id, prefix).await;
@@ -262,12 +235,9 @@ impl Capture {
             Err(e) => {
                 tracing::error!(recording = %id, error = format!("{e:#}"), "upload failed; spool kept");
                 self.publish(
-                    id,
-                    RecordingStatus::Failed,
-                    Some(reason),
-                    Some(FailReason::UploadFailed),
-                    Some(format!("{e:#}")),
-                    None,
+                    StatusEvent::new(id, RecordingStatus::Failed)
+                        .stopped(reason)
+                        .failed(FailReason::UploadFailed, format!("{e:#}")),
                 )
                 .await;
             }
@@ -282,6 +252,14 @@ impl Capture {
             tracing::warn!(recording = %id, error = %e, "compose wake-up failed; the worker's scan will find it");
         }
     }
+}
+
+/// The captured length, from the manifest the stop just wrote.
+fn captured_duration(dir: &std::path::Path) -> Option<u64> {
+    std::fs::read_to_string(dir.join("manifest.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<Manifest>(&s).ok())
+        .map(|m| m.duration_ms)
 }
 
 /// Relative names of everything in a spool folder, for a `captured` status without a bucket.

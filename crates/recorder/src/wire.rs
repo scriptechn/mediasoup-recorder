@@ -251,6 +251,45 @@ pub struct StatusEvent {
     /// Keys in the bucket, relative to the recording prefix (`captured` and `ready`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<Vec<String>>,
+    /// Captured length (`captured`), then the composite's (`ready`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+}
+
+impl StatusEvent {
+    pub fn new(recording_id: &str, status: RecordingStatus) -> Self {
+        Self {
+            recording_id: recording_id.to_string(),
+            status,
+            at: now_ms(),
+            stop_reason: None,
+            fail_reason: None,
+            fail_detail: None,
+            artifacts: None,
+            duration_ms: None,
+        }
+    }
+
+    pub fn stopped(mut self, reason: StopReason) -> Self {
+        self.stop_reason = Some(reason);
+        self
+    }
+
+    pub fn failed(mut self, reason: FailReason, detail: String) -> Self {
+        self.fail_reason = Some(reason);
+        self.fail_detail = Some(detail);
+        self
+    }
+
+    pub fn artifacts(mut self, artifacts: Vec<String>) -> Self {
+        self.artifacts = Some(artifacts);
+        self
+    }
+
+    pub fn duration(mut self, duration_ms: Option<u64>) -> Self {
+        self.duration_ms = duration_ms;
+        self
+    }
 }
 
 /// The registry entry in the `recorders:` hash: what a controller needs to pick and reach a recorder.

@@ -4,6 +4,13 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 the project follows [Semantic Versioning](https://semver.org/). The control protocol, the spool format and the manifest
 are the public contract: a breaking change to any of them is a major version.
 
+## [1.1.0] - 2026-09-28
+
+### Added
+
+- Status events carry `durationMs`: the captured length with `captured`, the composite's length with `ready`. An
+  application can show how long a recording is without reading the manifest.
+
 ## [1.0.0] - 2026-09-28
 
 First public release.
@@ -33,4 +40,5 @@ First public release.
 - Optional upload to any S3-compatible store; without it the recording stays in the spool.
 - A reference controller for mediasoup and an end-to-end example that needs no browser.
 
+[1.1.0]: https://github.com/scriptechn/mediasoup-recorder/releases/tag/v1.1.0
 [1.0.0]: https://github.com/scriptechn/mediasoup-recorder/releases/tag/v1.0.0

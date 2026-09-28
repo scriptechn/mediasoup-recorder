@@ -104,13 +104,15 @@ current load, and deleted at shutdown. Channel `recorders` carries `{ type: RECO
   "stopReason": "user",
   "failReason": null,
   "failDetail": null,
-  "artifacts": ["tracks/p1/c-9f2.webm", "events.jsonl", "manifest.json"]
+  "artifacts": ["tracks/p1/c-9f2.webm", "events.jsonl", "manifest.json"],
+  "durationMs": 180000
 }
 ```
 
 `stopReason` comes with `captured` and `failed` after a capture; `failReason` and `failDetail` with `failed`;
-`artifacts` (keys relative to the prefix) with `captured` and `ready`. Treat it as a hint: the manifest in the bucket is
-the truth for what exists.
+`artifacts` (keys relative to the prefix) with `captured` and `ready`. `durationMs` is the captured length with
+`captured` and the composite's length with `ready`. Treat it as a hint: the manifest in the bucket is the truth for what
+exists.
 
 **Compose queue.** List `recording-compose`; items are bucket prefixes. The capture role pushes after a successful
 upload; an operator pushes to re-run. Claims are `recording-compose-claim:<recordingId>` with an expiry.

@@ -16,7 +16,7 @@ use crate::policy::Policy;
 use crate::registry::Registry;
 use crate::spool::Manifest;
 use crate::storage::Storage;
-use crate::wire::{now_ms, FailReason, RecordingStatus, StatusEvent};
+use crate::wire::{FailReason, RecordingStatus, StatusEvent};
 use anyhow::{anyhow, Context, Result};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -204,22 +204,16 @@ impl Worker {
         tracing::info!(recording = %recording_id, %prefix, "compose job");
         publish(
             registry.as_deref_mut(),
-            &recording_id,
-            RecordingStatus::Composing,
-            None,
-            None,
-            None,
+            StatusEvent::new(&recording_id, RecordingStatus::Composing),
         )
         .await;
         match self.compose_and_upload(prefix, &dir).await {
-            Ok(artifacts) => {
+            Ok((artifacts, duration_ms)) => {
                 publish(
                     registry.as_deref_mut(),
-                    &recording_id,
-                    RecordingStatus::Ready,
-                    None,
-                    None,
-                    Some(artifacts),
+                    StatusEvent::new(&recording_id, RecordingStatus::Ready)
+                        .artifacts(artifacts)
+                        .duration(Some(duration_ms)),
                 )
                 .await;
                 // With a bucket the spool is a staging copy; without one it is the recording.
@@ -235,11 +229,8 @@ impl Worker {
                 tracing::error!(recording = %recording_id, error = format!("{e:#}"), "compose failed");
                 publish(
                     registry.as_deref_mut(),
-                    &recording_id,
-                    RecordingStatus::Failed,
-                    Some(FailReason::ComposeFailed),
-                    Some(format!("{e:#}")),
-                    None,
+                    StatusEvent::new(&recording_id, RecordingStatus::Failed)
+                        .failed(FailReason::ComposeFailed, format!("{e:#}")),
                 )
                 .await;
             }
@@ -251,7 +242,8 @@ impl Worker {
         }
     }
 
-    async fn compose_and_upload(&self, prefix: &str, dir: &Path) -> Result<Vec<String>> {
+    /// The artifact keys and the composite's length in milliseconds.
+    async fn compose_and_upload(&self, prefix: &str, dir: &Path) -> Result<(Vec<String>, u64)> {
         if !dir.join("manifest.json").is_file() {
             let Some(storage) = &self.storage else {
                 anyhow::bail!(
@@ -264,8 +256,8 @@ impl Worker {
         }
         let already: Manifest =
             serde_json::from_str(&std::fs::read_to_string(dir.join("manifest.json"))?)?;
-        if already.composite.is_some() {
-            return Ok(artifact_names(&already));
+        if let Some(composite) = &already.composite {
+            return Ok((artifact_names(&already), composite.duration_ms));
         }
         let result = {
             let dir = dir.to_path_buf();
@@ -306,7 +298,11 @@ impl Worker {
                     .await?;
             }
         }
-        Ok(artifact_names(&manifest))
+        let duration_ms = manifest
+            .composite
+            .as_ref()
+            .map_or(manifest.duration_ms, |c| c.duration_ms);
+        Ok((artifact_names(&manifest), duration_ms))
     }
 }
 
@@ -326,26 +322,11 @@ fn artifact_names(m: &Manifest) -> Vec<String> {
     v
 }
 
-async fn publish(
-    registry: Option<&mut Registry>,
-    id: &str,
-    status: RecordingStatus,
-    fail: Option<FailReason>,
-    detail: Option<String>,
-    artifacts: Option<Vec<String>>,
-) {
+async fn publish(registry: Option<&mut Registry>, event: StatusEvent) {
+    let (id, status) = (event.recording_id.as_str(), event.status);
     let Some(registry) = registry else {
         tracing::info!(recording = %id, status = ?status, "status (no redis to publish to)");
         return;
-    };
-    let event = StatusEvent {
-        recording_id: id.to_string(),
-        status,
-        at: now_ms(),
-        stop_reason: None,
-        fail_reason: fail,
-        fail_detail: detail,
-        artifacts,
     };
     if let Err(e) = registry.publish_status(&event).await {
         tracing::error!(recording = %id, error = %e, "status publish failed");
