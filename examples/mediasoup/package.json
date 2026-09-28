@@ -1,0 +1,13 @@
+{
+  "name": "recorder-mediasoup-example",
+  "private": true,
+  "type": "module",
+  "description": "A controller for the recorder: records every producer of a mediasoup router",
+  "scripts": {
+    "start": "node record.mjs"
+  },
+  "dependencies": {
+    "mediasoup": "^3.26.0",
+    "socket.io-client": "^4.8.0"
+  }
+}

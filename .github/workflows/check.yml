@@ -1,0 +1,25 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the toolchain image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: build
+          tags: recorder-check
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: fmt, clippy, test
+        run: >
+          docker run --rm -v "$PWD:/work" -w /work -e CARGO_TARGET_DIR=/tmp/target recorder-check ./scripts/check.sh

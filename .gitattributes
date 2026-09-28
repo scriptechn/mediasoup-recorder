@@ -1,0 +1,9 @@
+# Stored and checked out with LF everywhere: the shell scripts run inside Linux containers, and a CRLF
+# checkout on Windows breaks them.
+* text=auto eol=lf
+*.sh text eol=lf
+*.webm binary
+*.mp4 binary
+*.jpg binary
+*.png binary
+*.ttf binary
